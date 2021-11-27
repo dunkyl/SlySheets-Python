@@ -51,15 +51,6 @@ async def main():
     await sheet.delete[-2:]
     await sheet.set['Sheet 1!E3']('Hello World!')
 
-    # __delitem__ and __setitem__ cannot be awaited here due to language 
-    # limitations, but still spawn tasks
-    del sheet[-2:]
-    sheet['Sheet 1!E3'] = 'Hello World!'
-
-    # you can await them like so, to ensure the connection is not closed prematurely
-    # not strictly necessary in 'run forever' cases
-    await sheet.waitForPending()
-
     # dates
     today = await sheet.date_at('D5') # =TODAY()
     print(F"It is now {today.isoformat()} (timezone: {sheet.tz})")
