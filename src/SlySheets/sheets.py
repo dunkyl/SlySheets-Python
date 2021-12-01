@@ -1,6 +1,7 @@
 import re
 from datetime import datetime, timedelta, tzinfo
 from dataclasses import dataclass
+from typing import Callable, Generic
 # from enum import Enum
 
 import pytz
@@ -92,6 +93,9 @@ def colToIndex(letters: str) -> int:
         for power, letter in enumerate(reversed(letters)):
             index += ALPHABET.index(letter)*pow(26, power)
         return index
+
+T = TypeVar('T')
+U = TypeVar('U')
 
 def maybe(f: Callable[[T], U], x: T) -> U|None:
     '''
@@ -209,17 +213,14 @@ class Sheet(WebAPI):
     n_columns: int
     headers: dict[str, list[str]] # { page: [header1, header2, ...], ... }
     title: str
-    _async_ready: bool = False
 
-    def __init__(self, sheet_id: str, auth: OAuth2User, page_name: str|None=None):
-        super().__init__(auth=auth)
-        self.id = sheet_id
-        self.page = page_name
-
-    async def _async_init(self):
+    async def _async_init(self, sheet_id: str, auth: OAuth2User, page_name: str|None=None):
         '''
         Fetch the sheet's metadata and optionally headers.
         '''
+        await super()._async_init(auth=auth)
+        self.id = sheet_id
+        self.page = page_name
         properties = await self.properties()
         self.n_columns = properties.grid_properties.columnCount
         self.title = properties.title
@@ -228,14 +229,6 @@ class Sheet(WebAPI):
             self.headers = {
                 self.page: await self[0]
             }
-        return self
-
-    def __await__(self):
-        if not self._async_ready:
-            self._async_ready = True
-            return self._async_init().__await__()
-        else:
-            raise RuntimeError('Sheet has already been initialized and awaited.')
 
     async def properties(self) -> SheetMetadata:
         """
