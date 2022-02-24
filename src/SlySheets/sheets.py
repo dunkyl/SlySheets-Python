@@ -20,6 +20,7 @@ RE_A1 = re.compile(
 RE_LETTERS = re.compile(r'[a-z]+', re.IGNORECASE)
 
 ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+# note: timezone here is a workaround on windows for OSERROR 22, since the lotus epoch predates 1970
 LOTUS123_EPOCH = datetime(1899, 12, 30, 0, 0, 0, 0, timezone.utc)
 
 CellValue = int|str|float

@@ -6,6 +6,14 @@
 
 ## No-boilerplate, _async_ and _typed_ Google Sheets access. 😋
 
+This library does not have full coverage.
+Currently, the following topics are supported:
+
+* Editing sheet cells
+* Reading sheet metadata
+
+You can directly grant user tokens using the command line, covering the whole OAuth 1.0 grant process.
+
 ---
 
 Example usage:
