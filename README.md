@@ -6,6 +6,10 @@
 
 ## No-boilerplate, _async_ and _typed_ Google Sheets access. 😋
 
+```shell
+pip install slysheets
+```
+
 This library does not have full coverage.
 Currently, the following topics are supported:
 
