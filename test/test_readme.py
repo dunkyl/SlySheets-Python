@@ -1,11 +1,14 @@
-import asyncio
+import json
 from SlySheets import *
 
-async def main():
-    auth = OAuth2User.from_files('client.json', 'user.json')
-    sheet = await Sheet(' < your sheet id > ', auth)
+async def test_readme():
+
+    app = json.load(open('test/app.json'))
+
+    sheet = await Sheet(app, 'test/user.json', '1arnulJxyi-I6LEeCPpEy6XE5V87UF54dUAo9F8fM5rw', 'Sheet 1')
 
     print(sheet.title)
+    print(sheet.headers)
 
     # A1 notation
     a1 = await sheet['A1']
@@ -17,6 +20,7 @@ async def main():
 
     # zero-indexed rows
     first_row = await sheet[0]
+    assert isinstance(first_row, ResultRow)
     print(F" | {first_row[0]:8} | {first_row[1]:8} |")
 
     # header-indexed columns
@@ -35,12 +39,12 @@ async def main():
     # append, of course
     await sheet.append([0, 'x'])
     await sheet.append(Foo=1, Bar='y')
-    
-    await sheet.delete(slice(-2, None))
-    await sheet.set('Sheet 1!E3', 'Hello World!')
+
+    # TODO: consider not using slices to simplify    
+    # await sheet.delete(slice(-2, None))
+    await sheet.delete('A6:B7')
+    await sheet.set("'Sheet 1'!E3", 'Hello World!')
 
     # dates
     today = await sheet.date_at('D5') # =TODAY()
     print(F"It is now {today.isoformat()} (timezone: {sheet.tz})")
-
-asyncio.run(main())

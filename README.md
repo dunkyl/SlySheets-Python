@@ -4,7 +4,7 @@
 
 > 🐍 For Python 3.10+
 
-No-boilerplate, async and typed Google Sheets access. 😋
+## No-boilerplate, _async_ and _typed_ Google Sheets access. 😋
 
 ---
 
