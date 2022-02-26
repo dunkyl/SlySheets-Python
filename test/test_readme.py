@@ -27,15 +27,15 @@ async def test_readme():
         print(F" | {row['Foo']:6} | {row['Bar']:6} |") # |      1 | a     | etc...
 
     # append and extend, of course
-    await page.append([0, 'u'])
-    await page.append_dict({'Foo': 1, 'Bar': 'v'})
+    await page.append([21, 'u'])
+    await page.append_dict({'Foo': 22, 'Bar': 'v'})
 
-    await page.extend([[3, 'w'], [4, 'x']])
-    await page.extend_dicts([{'Foo': 5, 'Bar': 'y'}, {'Foo': 6, 'Bar': 'z'}])
+    await page.extend([[23, 'w'], [24, 'x']])
+    await page.extend_dicts([{'Foo': 25, 'Bar': 'y'}, {'Foo': 26, 'Bar': 'z'}])
 
     # TODO: consider not using slices to simplify    
     # await sheet.delete(slice(-2, None))
-    await page.delete_range('A6:B7')
+    await page.delete_range('A6:B11')
 
     # use spreadsheet object to update a specific page with A1 notation
     await spreadsheet.set_cell("'Sheet 1'!E3", 'Hello World!')

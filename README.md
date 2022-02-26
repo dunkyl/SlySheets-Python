@@ -60,7 +60,7 @@ async def main():
 
     # TODO: consider not using slices to simplify    
     # await sheet.delete(slice(-2, None))
-    await page.delete_range('A6:B7')
+    await page.delete_range('A6:B11')
 
     # use spreadsheet object to update a specific page with A1 notation
     await spreadsheet.set_cell("'Sheet 1'!E3", 'Hello World!')

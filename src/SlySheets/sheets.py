@@ -1,8 +1,7 @@
 import re
 from datetime import datetime, timedelta, tzinfo, timezone
 from dataclasses import dataclass
-from typing import Any, Callable, Generic, TypeVar
-# from enum import Enum
+from typing import Any, TypeVar
 
 import pytz
 
@@ -298,7 +297,7 @@ class Spreadsheet(WebAPI):
 
     pages: list[Page]
 
-    def __init__(self, app: str | OAuth2, user: str | OAuth2User | None, sheet_id: str):
+    def __init__(self, app: str | OAuth2, user: str | OAuth2User | None, sheet_id: str, scope: str = Scope.Sheets):
         if isinstance(user, str):
             user = OAuth2User(user)
 
@@ -309,6 +308,7 @@ class Spreadsheet(WebAPI):
             auth.user = user
         super().__init__(auth)
         self.id = sheet_id
+        auth.verify_scope(scope)
 
     async def _async_init(self):
         '''
