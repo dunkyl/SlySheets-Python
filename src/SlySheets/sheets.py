@@ -23,7 +23,7 @@ ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 # note: timezone here is a workaround on windows for OSERROR 22, since the lotus epoch predates 1970
 LOTUS123_EPOCH = datetime(1899, 12, 30, 0, 0, 0, 0, timezone.utc)
 
-CellValue = int|str|float
+CellValue = int|str|float|None
 
 class Scope: # (Enum):
     SheetsReadOnly = 'https://www.googleapis.com/auth/spreadsheets.readonly'
@@ -98,44 +98,29 @@ def colToIndex(letters: str) -> int:
 T = TypeVar('T')
 U = TypeVar('U')
 
-def maybe(f: Callable[[T], U], x: T) -> U|None:
-    '''
-    Return f(x) if x is not None, else None.
-    '''
-    if x is not None:
-        return f(x)
-    else:
-        return None
-
-@dataclass
-class GridProperties:
-    '''
-    Properties of a sheet.
-    '''
-    frozenColumnCount: int
-    frozenRowCount: int
-    columnCount: int
-
-@dataclass
-class SheetMetadata:
-    '''
-    Metadata about a sheet.
-    '''
-    title: str
-    timezone: tzinfo
-
-
-@dataclass
 class CellRange:
     '''
     0-indexed, inclusive, integer bounds for a range
     None means unbounded
     '''
-    page: str
+    page: str | None
     from_row: int
-    to_row: int|None
     from_col: int
+    to_row: int | None # None is case of unbounded
     to_col: int
+
+    def __init__(self, a1: str):
+        '''
+        Initialise from A1 notation.
+        '''
+        match = RE_A1.match(a1)
+        if match is None:
+            raise ValueError(F"Invalid A1 notation: {a1}")
+        self.page = match['page']
+        self.from_row = int(match['start_row']) - 1
+        self.to_row = int(match['end_row']) - 1 if match['end_row'] else None if match['end_col'] else self.from_row
+        self.from_col = colToIndex(match['start_col'])
+        self.to_col = colToIndex(match['end_col']) if match['end_col'] else self.from_col
 
     def __str__(self):
         '''Convert to A1 Notation'''
@@ -155,15 +140,14 @@ class CellRange:
         else:
             return s + F'{self.from_row+1}:{to_colA1}{self.to_row+1}'
 
-    def __repr__(self):
-            return F"<CellRange at {self}>"
-
-    def columns(self):
-        return indexToCol(self.from_col), indexToCol(self.to_col)
-
-
-def isLetters(t: str):
-    return RE_LETTERS.fullmatch(t) is not None
+    def shape(self):
+        '''
+        Return the number of rows and columns in the range.
+        '''
+        if self.to_row is None:
+            return (self.to_col - self.from_col + 1, 0)
+        else:
+            return (self.to_col - self.from_col + 1, self.to_row - self.from_row + 1)
 
 def sheets_date(timestamp: float | int, tz: tzinfo) -> datetime:
     '''
@@ -171,279 +155,244 @@ def sheets_date(timestamp: float | int, tz: tzinfo) -> datetime:
     '''
     return LOTUS123_EPOCH.astimezone(tz)+timedelta(days=timestamp)
 
-# T = TypeVar('T')
+class Page(APIObj['Spreadsheet']):
+    title: str
+    n_columns: int
 
-class ResultRow(Generic[T]):
-    '''
-    Wraps a list. Allows for indexing by the name of the header.
-    '''
-    def __init__(self, values: list[T], spreadsheet: 'Sheet'):
-        self.values = values
-        if spreadsheet.page is not None:
-            self.headers = spreadsheet.headers.get(spreadsheet.page, [])
+    def __init__(self, page_meta: dict[str, Any], service: 'Spreadsheet'):
+        page_props = page_meta['properties']
+        super().__init__(service)
+        self.title = page_props['title']
+        self.n_columns = page_props['gridProperties']['columnCount']
+
+    async def range(self, a1: str):
+        a1_ = CellRange(a1)
+        if a1_.page is None:
+            a1_.page = self.title
+        return await self._service.range(a1_)
+
+    async def delete_range(self, a1: str):
+        a1_ = CellRange(a1)
+        if a1_.page is None:
+            a1_.page = self.title
+        return await self._service.delete_range(a1_)
+
+    async def set_range(self, a1: str, values: list[list[Any]]):
+        a1_ = CellRange(a1)
+        if a1_.page is None:
+            a1_.page = self.title
+        return await self._service.set_range(a1_, values)
+
+    async def set_cell(self, a1: str, value: list[list[Any]]):
+        return await self.set_range(a1, [[value]])
+
+    async def rows(self, start: int, end: int, n_cols: int | None = None):
+        '''Get the content of a range of rows, inclusive, zero-indexed'''
+        n_cols = n_cols or self.n_columns
+        a1 = F'A{start+1}:{indexToCol(n_cols-1)}{end+1}'
+        return (await self.range(a1))
+
+    async def row(self, index: int, n_cols: int | None = None):
+        '''Get the content of a single row, zero-indexed'''
+        return (await self.rows(index, index, n_cols))[0]
+
+    async def cell(self, a1: str):
+        '''Get the content of a single cell'''
+        return (await self.range(a1))[0][0]
+
+    async def date_at_cell(self, a1: str) -> datetime:
+        '''Get the date at a cell'''
+        a1_ = CellRange(a1)
+        if a1_.page is None:
+            a1_.page = self.title
+        return await self._service.date_at_cell(str(a1_))
+
+    async def column(self, index: int):
+        a1_col = indexToCol(index)
+        return [ r[0] for r in await self.range(F'{a1_col}1:{a1_col}')]
+
+    async def column_named(self, name: str):
+        header_row = await self.row(0)
+        if name in header_row:
+            return await self.column(header_row.index(name))
         else:
-            self.headers = []
+            raise KeyError(F"Column header was not specified or does not exist: {name}")
 
-    def __getitem__(self, key: slice|str|int):
-        match key:
-            case str():
-                if key in self.headers:
-                    return self.values[self.headers.index(key)]
-                elif isLetters(key):
-                    return self.values[colToIndex(key)]
-                else:
-                    raise KeyError(F"Column header was not specified or does not exist: {key}")
-            case _:
-                return self.values[key]
+    async def rows_dicts(self, start: int, end: int):
+        header_row = [str(h) for h in await self.row(0)]
+        rows = [ dict(zip(header_row, row)) for row in await self.rows(start, end) ]
+        return rows
 
-    def __iter__(self):
-        return iter(self.values)
+    async def extend(self, values: list[list[CellValue]], search_: str = 'A1'):
+        await self._service.extend(values, self.title, search_)
 
-    def __str__(self):
-        return str(self.values)
+    async def extend_dicts(self, values: list[dict[str, CellValue]], search_: str = 'A1'):
+        header_row = [str(h) for h in await self.row(0)]
+        rows = [ [obj.get(h, None) for h in header_row] for obj in values ]
+        await self._service.extend(rows, self.title, search_)
 
-class Sheet(WebAPI):
+    async def append(self, row: list[CellValue], search_: str = 'A1'):
+        await self.extend([row], search_)
+
+    async def append_dict(self, obj: dict[str, CellValue], search_: str = 'A1'):
+        await self.extend_dicts([obj], search_)
+
+    def batch(self):
+        return BatchEdit(self)
+
+@dataclass
+class BatchEditOp:
+    kind: str
+    content: dict[str, Any]
+
+class BatchEdit:
+    _page: Page
+    _requests: list[BatchEditOp]
+
+    # TODO: finish
+    def __init__(self, page: Page):
+        self._page = page
+        self._requests = []
+
+    async def __aenter__(self):
+        return self
+    
+    async def __aexit__(self, _exc_type: Any, _exc_val: Any, _exc_tb: Any):
+
+        # TODO: call
+        # POST https://sheets.googleapis.com/v4/spreadsheets/{spreadsheetId}:batchUpdate
+        # {
+        #     "requests": [
+        #         {
+        #         object (Request)
+        #         }
+        #     ],
+        #     "includeSpreadsheetInResponse": boolean,
+        #     "responseRanges": [
+        #         string
+        #     ],
+        #     "responseIncludeGridData": boolean
+        #     }
+        pass
+
+    def set_range(self, a1: str, values: list[list[CellValue]]):
+        field_mask = "userEnteredValue"
+        self._requests.append(BatchEditOp(
+            'UpdateCellsRequest', {
+                'rows': [
+                    { 'values': [ { 'userEnteredValue': v } for v in row ] } for row in values
+                ],
+                'fields': field_mask,
+                'range': str(a1)
+            }))
+
+class Spreadsheet(WebAPI):
     """
     Class for handling sheets
     """
     base_url = "https://sheets.googleapis.com/v4/spreadsheets"
+
     id: str
-    page: str|None # TODO: infer?
-    n_columns: int
-    headers: dict[str, list[str]] # { page: [header1, header2, ...], ... }
     title: str
     timezone: tzinfo
 
-    def __init__(self, app: OAuth2 | dict[str, str], user: OAuth2User | str, sheet_id: str, page_name: str|None=None):
+    pages: list[Page]
+
+    def __init__(self, app: str | OAuth2, user: str | OAuth2User | None, sheet_id: str):
         if isinstance(user, str):
             user = OAuth2User(user)
 
-        if isinstance(app, dict):
+        if isinstance(app, str):
             auth = OAuth2(app, user)
         else:
             auth = app
             auth.user = user
         super().__init__(auth)
         self.id = sheet_id
-        self.page = page_name
 
     async def _async_init(self):
         '''
         Fetch the sheet's metadata and optionally headers.
         '''
         await super()._async_init()
-        metadata = await self._spreadsheets_get()
-        self.title = metadata['properties']['title']
-        self.tz = pytz.timezone(metadata['properties']['timeZone'])
+        meta = await self._spreadsheets_get()
 
-        if self.page is not None:
-            sheets: list[dict[str, Any]] = metadata['sheets']
-            default_sheet_data = None
-            for sheet in sheets:
-                if sheet['properties']['title'] == self.page:
-                    default_sheet_data = sheet
-                    break
-            if default_sheet_data is None:
-                raise ValueError(F"Sheet {self.page} does not exist")
-            self.n_columns = default_sheet_data['properties']['gridProperties']['columnCount']
-        self.headers = {}
-        if self.page is not None:
-            header_row = await self[0]
-            assert isinstance(header_row, ResultRow)
-            self.headers = {
-                self.page: list(header_row)
-            }
+        # spreadsheet properties
+        props = meta['properties']
+        self.title = props['title']
+        self.tz = pytz.timezone(props['timeZone'])
 
+        # pages
+        self.pages = [Page(page_meta, self) for page_meta in meta['sheets']]
 
-    async def parse_cell_range(self,
-            key: int|str|slice|tuple[int|str|slice, int|str|slice],
-            default_col_range: tuple[int, int],
-            ) -> CellRange:
-        '''
-        Turn any access specifier into an abstract representation.
-        Turning A1 notation into this and back allows for some validation.
-        '''
+    def page(self, title: str):
+        for page in self.pages:
+            if page.title == title:
+                return page
+        raise ValueError(F"Page {title} does not exist")
 
-        # defaults
-        start_col, end_col = default_col_range
-        start_row = 0
-        end_row = None
-        if self.page is not None:
-            page = self.page
-        else:
-            page = None
+    async def range(self, a1: str | CellRange) -> list[list[CellValue]]:
+        if isinstance(a1, str):
+            a1 = CellRange(a1)
+        if a1.page is None:
+            raise ValueError(F"Page not specified: {a1}")
 
-        match key:
-            case int(): # single row
-                start_row = end_row = key
-            case slice(): # row range
-                if key.step is not None and key.step != 1:
-                    raise ValueError(F"Step size must be 1 for row ranges: {key}")
-                start_row = key.start
+        values = (await self._values_get(str(a1)))['values']
 
-                # CellRange in inclusive, python slices are not
-                end_row = key.stop-1 if key.stop is not None else None
+        # fill in omitted cells on bottom and right with None
+        shape_x, shape_y = a1.shape()
 
-            case str() if m := RE_A1.fullmatch(key): # A1 notation
-                page = m.group('page') or page
-                start_row = maybe(lambda x: int(x)-1, m.group('start_row')) or start_row
-                end_row = maybe(lambda x: int(x)-1, m.group('end_row')) or end_row
-                start_col = maybe(colToIndex, m.group('start_col')) or start_col
-                end_col = maybe(colToIndex, m.group('end_col')) or end_col
-            case str(): # header / single column
-                if page is None:
-                    raise ValueError(F"Cannot specify a column by header without a page name: {key}")
-                start_col = end_col = self.headers[page].index(key)
-            case (x, y): # 2d index
-                match x:
-                    case int(): # single row
-                        start_row = end_row = x
-                    case slice(): # row range
-                        start_row = x.start
-                        end_row = x.stop-1 if x.stop is not None else None
-                    case _:
-                        raise ValueError(F"Invalid row index: {x}")
-                match y:
-                    case int(): # single column
-                        start_col = end_col = y
-                    case slice(): # column range
-                        start_col = y.start
-                        if y.stop is None:
-                            raise NotImplemented("Spilling column ranges are not yet supported")
-                        end_col = y.stop-1
-                    case str(): # header or A1 column
-                        if page is None:
-                                raise ValueError(F"Cannot specify a column by header without a page name: {key}")
-                        try:
-                            start_col = end_col = self.headers[page].index(y)
-                        except ValueError:
-                            if RE_LETTERS.fullmatch(y):
-                                start_col = end_col = colToIndex(y)
-                            else:
-                                raise ValueError(F"Invalid column index: {y}")
-                    case _:
-                        raise ValueError(F"Invalid column index: {y}")
-            case _:
-                raise ValueError(F"Invalid index: {key}")
-        if page is None:
-            raise ValueError(F"Could not determine page for range: {key}")
-        return CellRange(
-                page, start_row, end_row, start_col, end_col)
+        print(F"{a1} shape: {shape_x}, {shape_y}")
 
-    async def set(self, range_: str, values: list[list[CellValue]]|list[CellValue]|CellValue):
+        if shape_y > len(values):
+            values += [[]] * (shape_y - len(values))
+        for i, row in enumerate(values):
+            if shape_x > len(row):
+                values[i] += [None] * (shape_x - len(row))
 
-        range = await self.parse_cell_range(range_, (0, self.n_columns-1))
+        return values
 
-        # promote low-dimension lists to 2d
-        match values:
-            case int()|str()|float():
-                values = [[values]]
-            case list() if not isinstance(values[0], list):
-                values = [values] # type: ignore
-            case _: pass
-        
-        await self._values_update(
-            str(range),
-            {
-                'range': str(range),
+    async def delete_range(self, a1: str | CellRange):
+        if isinstance(a1, str):
+            a1 = CellRange(a1)
+        if a1.page is None:
+            raise ValueError(F"Page not specified: {a1}")
+
+        await self._values_clear(str(a1))
+
+    async def cell(self, a1: str) -> CellValue:
+        return (await self.range(a1))[0][0]
+
+    async def set_range(self, a1: str | CellRange, values: list[list[CellValue]]):
+        if isinstance(a1, str):
+            a1 = CellRange(a1)
+        if a1.page is None:
+            raise ValueError(F"Page not specified: {a1}")
+
+        await self._values_update( str(a1), {
+                'range': str(a1),
                 'majorDimension': 'ROWS',
                 'values': values
             })
 
-    async def date_at(self, range_: str) -> datetime:
-        stamp = await self[range_]
+    async def set_cell(self, a1: str | CellRange, value: CellValue):
+        await self.set_range(a1, [[value]])
+
+    async def date_at_cell(self, a1: str) -> datetime:
+        stamp = await self.cell(a1)
         if not isinstance(stamp, (float, int)):
             raise ValueError(F"Expected a sheets timestamp, got {stamp}")
         return sheets_date(stamp, self.tz)
-
-    async def __getitem__(self, *keys: int|str|slice|tuple[int|slice, int|str|slice]) -> float | int | str | ResultRow[Any] | list[ResultRow[Any]]:
-        key: int|str|slice|tuple[int|slice, int|str|slice]
-        if len(keys) == 1:
-            key = keys[0]
-        elif len(keys) == 2:
-            key = (keys[0], keys[1]) # type: ignore
-        else:
-            raise ValueError(F"Invalid number of keys: {keys}")
-
-        range = await self.parse_cell_range(key, (0, self.n_columns-1))
-
-        values = (await self._values_get(str(range)))['values']
-
-        # reduce dimensions, for convenience
-        # TODO: maybe only when not slicing/ A1 range
-        if len(values) == 1 and len(values[0]) == 1:
-            return values[0][0]
-        elif len(values) == 1 and not isinstance(key, slice):
-            return ResultRow(values[0], self)
-        else:
-            return [ResultRow(row, self) for row in values]
-
-    # async def getCells(self, key, cols=None) -> Any:
-
-    #     shortcut, rangef, step = await self.parseCellRange(key, True, cols)
-
-    #     shortstop = rangef.endRow
-    #     if shortstop is not None: shortstop += 1
-        
-    #     if shortcut:
-    #         values = (await self.rows(rangef.columns()))[rangef.startRow:shortstop]
-    #     else:
-    #         values = (await self._values_get(rangef))['values']
-
-    #     if step > 1:
-    #         values = values[slice(None, None, step)]
-
-    #     # reduce dimensions, for convenience
-    #     if len(values) == 1 and len(values[0]) == 1:
-    #         return values[0][0]
-    #     elif len(values) == 1 and not isinstance(key, slice):
-    #         return ResultRow(values[0], self)
-    #     else:
-    #         return [ResultRow(row, self) for row in values]
     
-    async def append(self, row: CellValue|list[CellValue]|None=None, search_: str = 'A1', **kwargs: CellValue):
-        if row is None and not kwargs:
-            raise ValueError("Must provide data to append")
-        elif row is None:
-            if self.page is None:
-                raise ValueError("A default page must be specified for appending into rows by header.")
-            if not all(k in self.headers[self.page] for k in  kwargs):
-                raise ValueError("Unrecognized header keyword(s)")
-            elif self.page is None:
-                raise ValueError("Cannot append to a sheet without a page name")
-            else:
-                row = [kwargs[key] for key in self.headers[self.page]]
-        if isinstance(row, (int, str, float)):
-            row = [row]
-        if not '!' in search_ and self.page:
-            search_range = self.page+'!'+search_
-        else:
-            search_range = search_
+    async def extend(self, values: list[list[CellValue]], page: str, search_: str = 'A1'):
+        search_range = F"'{page}'!{search_}"
         await self._values_append(
             search_range,
             {
                 'range': search_range,
                 'majorDimension': 'ROWS',
-                'values': [row]
+                'values': values
             })
-
-    # async def getSpreadSheetInfo(self, id: str) -> 'Spreadsheet':
-    #     d = await self._spreadsheets_get(id)
-    #     title = d['title']
-    #     timezone = pytz.timezone(d['timeZone'])
-    #     return title, timezone
-
-    async def delete(self, *keys: int|str|slice):
-        if len(keys) == 1:
-            key = keys[0]
-        else:
-            key = (keys[0],  keys[1])
-        # if isinstance(key, int) and key < 0: # indexing from end
-        #     key = self.n_rows + key
-        # elif isinstance(key, slice) and key.start < 0:
-        #     key = slice(self.n_rows + key.start, key.stop, key.step)
-        range = await self.parse_cell_range(key, (0, self.n_columns-1))
-        await self._values_clear(str(range))
 
     async def _values_get(self, range: str) -> dict[str, Any]:
         return await self.get_json(
@@ -468,26 +417,8 @@ class Sheet(WebAPI):
             params=ValueInputOption.RAW.to_dict(), 
             json=value)
 
-    async def _spreadsheets_get(self, sheet_id: str|None=None) -> dict[str, Any]:
-        if sheet_id is None: sheet_id = self.id
-        return await self.get_json(
-            F"/{sheet_id}",
-        )
-
-    # async def rowCount(self) -> int:
-    #     return len(await self.rows())
-
-    # async def rows(self, cols=None) -> list[list[Any]]:
-    #     n, rows = 0, []
-    #     if cols is None: cols = self.cols
-    #     while len(result := await self.getCells(slice(n, n+500, 1), cols=cols)) > 0:
-    #         n += 500
-    #         rows += result
-    #         if len(result) < 500: break
-    #     return rows
-
-
-
+    async def _spreadsheets_get(self) -> dict[str, Any]:
+        return await self.get_json(F"/{self.id}")
 
     
 

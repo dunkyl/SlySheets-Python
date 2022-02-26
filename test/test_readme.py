@@ -1,50 +1,50 @@
-import json
 from SlySheets import *
 
 async def test_readme():
 
-    app = json.load(open('test/app.json'))
-
-    sheet = await Sheet(app, 'test/user.json', '1arnulJxyi-I6LEeCPpEy6XE5V87UF54dUAo9F8fM5rw', 'Sheet 1')
-
-    print(sheet.title)
-    print(sheet.headers)
+    spreadsheet = await Spreadsheet('test/app.json', 'test/user.json', '1arnulJxyi-I6LEeCPpEy6XE5V87UF54dUAo9F8fM5rw')
+    page = spreadsheet.page('Sheet 1')
 
     # A1 notation
-    a1 = await sheet['A1']
+    a1 = await page.cell('A1')
     print(F"Cell A1: {a1}") # Cell A1: Foo
 
-    # or zero-indexed row/col
-    first_cell = await sheet[0, 0]
-    print(F"Cell A1 (again): {first_cell}") # Cell A1 (again): Foo
-
     # zero-indexed rows
-    first_row = await sheet[0]
-    assert isinstance(first_row, ResultRow)
+    first_row = await page.row(0)
+    print(first_row)
     print(F" | {first_row[0]:6} | {first_row[1]:6} |") # | Foo     | Bar     |
 
     # header-indexed columns
-    foos = await sheet['Foo'] # list[Any]
+    foos = await page.column_named('Foo')
     print(F"Foos: {foos}") # Foos: [1, 2, 3, 26]
 
-    # slicing and iterators
-    # TODO: async iters like ytdapi
-    for row in await sheet[1:3]:
+    # zero-indexed columns
+    foos_2 = await page.column(0)
+    assert foos == foos_2
+
+    for row in await page.rows_dicts(1, 4):
         # index result by header
         print(F" | {row['Foo']:6} | {row['Bar']:6} |") # |      1 | a     | etc...
-    for row in await sheet[3:]:
-        # or by column
-        print(F" | {row['A']:6} | {row['B']:6} |") # |    26 | z     | etc...
 
-    # append, of course
-    await sheet.append([0, 'x'])
-    await sheet.append(Foo=1, Bar='y')
+    # append and extend, of course
+    await page.append([0, 'u'])
+    await page.append_dict({'Foo': 1, 'Bar': 'v'})
+
+    await page.extend([[3, 'w'], [4, 'x']])
+    await page.extend_dicts([{'Foo': 5, 'Bar': 'y'}, {'Foo': 6, 'Bar': 'z'}])
 
     # TODO: consider not using slices to simplify    
     # await sheet.delete(slice(-2, None))
-    await sheet.delete('A6:B7')
-    await sheet.set("'Sheet 1'!E3", 'Hello World!')
+    await page.delete_range('A6:B7')
+
+    # use spreadsheet object to update a specific page with A1 notation
+    await spreadsheet.set_cell("'Sheet 1'!E3", 'Hello World!')
 
     # dates
-    today = await sheet.date_at('D5') # =TODAY()
-    print(F"It is now {today.isoformat()} (timezone: {sheet.tz})")
+    today = await page.date_at_cell('D5') # =TODAY()
+    assert isinstance(today, datetime)
+    print(F"It is now {today.isoformat()} (timezone: {spreadsheet.tz})")
+
+    # batch edits
+    async with page.batch() as batch:
+        batch.set_range("C2:D3", [[0, 1], [2, 3]])
