@@ -1,3 +1,4 @@
+from enum import Enum
 import re
 from datetime import datetime, timedelta, tzinfo, timezone
 from dataclasses import dataclass
@@ -28,7 +29,7 @@ class Scope: # (Enum):
     SheetsReadOnly = 'https://www.googleapis.com/auth/spreadsheets.readonly'
     Sheets         = 'https://www.googleapis.com/auth/spreadsheets'
 
-class ValueRenderOption(EnumParam):
+class ValueRenderOption(Enum):
     '''
     What format to return cells in, since formula and display content do not always match.
     From https://developers.google.com/sheets/api/reference/rest/v4/ValueRenderOption.
@@ -37,7 +38,7 @@ class ValueRenderOption(EnumParam):
     PLAIN     = 'UNFORMATTED_VALUE'
     FORMULA   = 'FORMULA'
 
-class ValueInputOption(EnumParam):
+class ValueInputOption(Enum):
     '''
     Whether to interpret the new value literally, or to parse the same as a user typing it in.
     From https://developers.google.com/sheets/api/reference/rest/v4/ValueInputOption.
@@ -45,7 +46,7 @@ class ValueInputOption(EnumParam):
     RAW       = 'RAW'
     USER      = 'USER_ENTERED'
 
-class InsertDataOption(EnumParam):
+class InsertDataOption(Enum):
     '''
     Whether to insert new rows when updating a range, or overwrite any existing values.
     From https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/append#InsertDataOption.
@@ -53,7 +54,7 @@ class InsertDataOption(EnumParam):
     OVERWRITE = 'OVERWRITE'
     INSERT    = 'INSERT_ROWS'
 
-class MajorDimension(EnumParam):
+class MajorDimension(Enum):
     '''
     Whether elements of the returned value array are columns or rows.
     From https://developers.google.com/sheets/api/reference/rest/v4/Dimension.
@@ -61,7 +62,7 @@ class MajorDimension(EnumParam):
     ROW       = 'ROWS'
     COLUMN    = 'COLUMNS'
 
-class DateTimeRenderOption(EnumParam):
+class DateTimeRenderOption(Enum):
     '''
     How to format cells containing date/time/datetimes.
     From https://developers.google.com/sheets/api/reference/rest/v4/DateTimeRenderOption.
@@ -117,7 +118,13 @@ class CellRange:
             raise ValueError(F"Invalid A1 notation: {a1}")
         self.page = match['page']
         self.from_row = int(match['start_row']) - 1
-        self.to_row = int(match['end_row']) - 1 if match['end_row'] else None if match['end_col'] else self.from_row
+        if match['end_col']:
+            if match['end_row']:
+                self.to_row = int(match['end_row']) - 1
+            else:
+                self.to_row = None
+        else:
+            self.to_row = self.from_row
         self.from_col = colToIndex(match['start_col'])
         self.to_col = colToIndex(match['end_col']) if match['end_col'] else self.from_col
 
@@ -154,13 +161,14 @@ def sheets_date(timestamp: float | int, tz: tzinfo) -> datetime:
     '''
     return LOTUS123_EPOCH.astimezone(tz)+timedelta(days=timestamp)
 
-class Page(APIObj['Spreadsheet']):
+class Page:
+    _sheet: 'Spreadsheet'
     title: str
     n_columns: int
 
-    def __init__(self, page_meta: dict[str, Any], service: 'Spreadsheet'):
+    def __init__(self, page_meta: dict[str, Any], sheet: 'Spreadsheet'):
         page_props = page_meta['properties']
-        super().__init__(service)
+        self._sheet = sheet
         self.title = page_props['title']
         self.n_columns = page_props['gridProperties']['columnCount']
 
@@ -168,19 +176,19 @@ class Page(APIObj['Spreadsheet']):
         a1_ = CellRange(a1)
         if a1_.page is None:
             a1_.page = self.title
-        return await self._service.range(a1_)
+        return await self._sheet.range(a1_)
 
     async def delete_range(self, a1: str):
         a1_ = CellRange(a1)
         if a1_.page is None:
             a1_.page = self.title
-        return await self._service.delete_range(a1_)
+        return await self._sheet.delete_range(a1_)
 
     async def set_range(self, a1: str, values: list[list[Any]]):
         a1_ = CellRange(a1)
         if a1_.page is None:
             a1_.page = self.title
-        return await self._service.set_range(a1_, values)
+        return await self._sheet.set_range(a1_, values)
 
     async def set_cell(self, a1: str, value: list[list[Any]]):
         return await self.set_range(a1, [[value]])
@@ -204,7 +212,7 @@ class Page(APIObj['Spreadsheet']):
         a1_ = CellRange(a1)
         if a1_.page is None:
             a1_.page = self.title
-        return await self._service.date_at_cell(str(a1_))
+        return await self._sheet.date_at_cell(str(a1_))
 
     async def column(self, index: int):
         a1_col = indexToCol(index)
@@ -223,12 +231,12 @@ class Page(APIObj['Spreadsheet']):
         return rows
 
     async def extend(self, values: list[list[CellValue]], search_: str = 'A1'):
-        await self._service.extend(values, self.title, search_)
+        await self._sheet.extend(values, self.title, search_)
 
     async def extend_dicts(self, values: list[dict[str, CellValue]], search_: str = 'A1'):
         header_row = [str(h) for h in await self.row(0)]
         rows = [ [obj.get(h, None) for h in header_row] for obj in values ]
-        await self._service.extend(rows, self.title, search_)
+        await self._sheet.extend(rows, self.title, search_)
 
     async def append(self, row: list[CellValue], search_: str = 'A1'):
         await self.extend([row], search_)
@@ -290,46 +298,41 @@ class Spreadsheet(WebAPI):
     Class for handling sheets
     """
     base_url = "https://sheets.googleapis.com/v4/spreadsheets"
-
     id: str
-    title: str
-    timezone: tzinfo
 
-    pages: list[Page]
+    _tz = None
 
-    def __init__(self, app: str | OAuth2, user: str | OAuth2User | None, sheet_id: str, scope: str = Scope.Sheets):
-        if isinstance(user, str):
-            user = OAuth2User(user)
-
-        if isinstance(app, str):
-            auth = OAuth2(app, user)
-        else:
-            auth = app
-            auth.user = user
+    def __init__(self, auth: OAuth2, sheet_id: str):
         super().__init__(auth)
         self.id = sheet_id
-        auth.verify_scope(scope)
 
-    async def _async_init(self):
-        '''
-        Fetch the sheet's metadata and optionally headers.
-        '''
-        await super()._async_init()
-        meta = await self._spreadsheets_get()
+    async def title(self):
+        return (await self._spreadsheets_get())['properties']['title']
+    
+    # get last tz if already fetched
+    async def _timezone(self):
+        if self._tz is None:
+            return await self.tz()
+        return self._tz
 
-        # spreadsheet properties
-        props = meta['properties']
-        self.title = props['title']
-        self.tz = pytz.timezone(props['timeZone'])
+    async def tz(self):
+        tz_str = (await self._spreadsheets_get())['properties']['timeZone']
+        self._tz = pytz.timezone(tz_str)
+        return self._tz
+    
+    async def pages(self) -> list[Page]:
+        return [
+            Page(page_meta, self)
+            for page_meta
+            in (await self._spreadsheets_get())['sheets']
+        ]
 
-        # pages
-        self.pages = [Page(page_meta, self) for page_meta in meta['sheets']]
-
-    def page(self, title: str):
-        for page in self.pages:
+    async def page(self, title: str):
+        pages = await self.pages()
+        for page in pages:
             if page.title == title:
                 return page
-        raise ValueError(F"Page {title} does not exist")
+        raise KeyError(F"Page {title} does not exist")
 
     async def range(self, a1: str | CellRange) -> list[list[CellValue]]:
         if isinstance(a1, str):
@@ -382,7 +385,7 @@ class Spreadsheet(WebAPI):
         stamp = await self.cell(a1)
         if not isinstance(stamp, (float, int)):
             raise ValueError(F"Expected a sheets timestamp, got {stamp}")
-        return sheets_date(stamp, self.tz)
+        return sheets_date(stamp, await self._timezone())
     
     async def extend(self, values: list[list[CellValue]], page: str, search_: str = 'A1'):
         search_range = F"'{page}'!{search_}"
@@ -397,13 +400,13 @@ class Spreadsheet(WebAPI):
     async def _values_get(self, range: str) -> dict[str, Any]:
         return await self.get_json(
             F"/{self.id}/values/{range}",
-            ValueRenderOption.PLAIN.to_dict()
+            { "valueRenderOption": ValueRenderOption.PLAIN }
         )
 
     async def _values_append(self, range: str, value: dict[str, Any]) -> dict[str, Any]:
         return await self.post_json(
             F"/{self.id}/values/{range}:append",
-            params=ValueInputOption.RAW.to_dict(), 
+            { "valueInputOption": ValueInputOption.RAW },
             json=value)
 
     async def _values_clear(self, range: str) -> dict[str, Any]:
@@ -414,7 +417,7 @@ class Spreadsheet(WebAPI):
     async def _values_update(self, range: str, value: dict[str, Any]) -> dict[str, Any]:
         return await self.put_json(
             F"/{self.id}/values/{range}",
-            params=ValueInputOption.RAW.to_dict(), 
+            { "valueInputOption": ValueInputOption.RAW }, 
             json=value)
 
     async def _spreadsheets_get(self) -> dict[str, Any]:

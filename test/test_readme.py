@@ -2,8 +2,12 @@ from SlySheets import *
 
 async def test_readme():
 
-    spreadsheet = await Spreadsheet('test/app.json', 'test/user.json', '1arnulJxyi-I6LEeCPpEy6XE5V87UF54dUAo9F8fM5rw')
-    page = spreadsheet.page('Sheet 1')
+    app = OAuth2.app.from_json_file('test/app.json')
+    user = OAuth2.user.from_json_file('test/user.json')
+    auth = OAuth2(app, user)
+
+    spreadsheet = Spreadsheet(auth, '1arnulJxyi-I6LEeCPpEy6XE5V87UF54dUAo9F8fM5rw')
+    page = await spreadsheet.page('Sheet 1')
 
     # A1 notation
     a1 = await page.cell('A1')
@@ -43,7 +47,7 @@ async def test_readme():
     # dates
     today = await page.date_at_cell('D5') # =TODAY()
     assert isinstance(today, datetime)
-    print(F"It is now {today.isoformat()} (timezone: {spreadsheet.tz})")
+    print(F"It is now {today.isoformat()} (timezone: {await spreadsheet.tz()})")
 
     # batch edits
     async with page.batch() as batch:
