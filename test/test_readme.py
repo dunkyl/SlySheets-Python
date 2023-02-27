@@ -1,11 +1,13 @@
 from SlySheets import *
 
 async def test_readme():
-    
+
     auth = OAuth2('test/app.json', 'test/user.json')
 
     spreadsheet = Spreadsheet(auth, '1arnulJxyi-I6LEeCPpEy6XE5V87UF54dUAo9F8fM5rw')
     page = await spreadsheet.page('Sheet 1')
+
+    print(page.link()) # https://docs.google.com/spreadsheets/d/1arnulJxyi-I6LEeCPpEy6XE5V87UF54dUAo9F8fM5rw/edit#gid=0
 
     # A1 notation
     a1 = await page.cell('A1')

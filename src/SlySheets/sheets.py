@@ -1,3 +1,7 @@
+'''
+Google Sheets API and types.
+https://developers.google.com/sheets/api/guides/concepts
+'''
 from enum import Enum
 import re
 from datetime import datetime, timedelta, tzinfo, timezone
@@ -163,14 +167,19 @@ def sheets_date(timestamp: float | int, tz: tzinfo) -> datetime:
 
 class Page:
     _sheet: 'Spreadsheet'
+    id: int
     title: str
     n_columns: int
 
     def __init__(self, page_meta: dict[str, Any], sheet: 'Spreadsheet'):
         page_props = page_meta['properties']
         self._sheet = sheet
+        self.id = page_props['sheetId']
         self.title = page_props['title']
         self.n_columns = page_props['gridProperties']['columnCount']
+
+    def link(self):
+        return F'{self._sheet.link()}#gid={self.id}'
 
     async def range(self, a1: str):
         a1_ = CellRange(a1)
@@ -306,7 +315,12 @@ class Spreadsheet(WebAPI):
         super().__init__(auth)
         self.id = sheet_id
 
+    def link(self):
+        '''Hyperlink to the spreadsheet'''
+        return F'https://docs.google.com/spreadsheets/d/{self.id}/edit#gid=0'
+
     async def title(self):
+        '''Title of the spreadsheet'''
         return (await self._spreadsheets_get())['properties']['title']
     
     # get last tz if already fetched
@@ -316,11 +330,13 @@ class Spreadsheet(WebAPI):
         return self._tz
 
     async def tz(self):
+        '''Default timezone of the spreadsheet'''
         tz_str = (await self._spreadsheets_get())['properties']['timeZone']
         self._tz = pytz.timezone(tz_str)
         return self._tz
     
     async def pages(self) -> list[Page]:
+        '''Get a `Page` for each page in the spreadhsheet'''
         return [
             Page(page_meta, self)
             for page_meta
@@ -328,6 +344,7 @@ class Spreadsheet(WebAPI):
         ]
 
     async def page(self, title: str):
+        '''Get a `Page` by title'''
         pages = await self.pages()
         for page in pages:
             if page.title == title:

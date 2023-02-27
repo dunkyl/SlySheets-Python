@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+- `Spreadsheet.link()`
+- `Page.link()`
+
 ### Changed
 - `Spreadsheet` is no longer `AsyncInit` and should not be awaited
 - `Spreadsheet` constructor now takes a `SlyAPI.OAuth2`

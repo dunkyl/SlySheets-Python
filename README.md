@@ -37,6 +37,8 @@ async def main():
     spreadsheet = await Spreadsheet(auth, '1arnulJxyi-I6LEeCPpEy6XE5V87UF54dUAo9F8fM5rw')
     page = spreadsheet.page('Sheet 1')
 
+    print(page.link()) # https://docs.google.com/spreadsheets/d/1arnulJxyi-I6LEeCPpEy6XE5V87UF54dUAo9F8fM5rw/edit#gid=0
+
     # A1 notation
     a1 = await page.cell('A1')
     print(F"Cell A1: {a1}") # Cell A1: Foo
