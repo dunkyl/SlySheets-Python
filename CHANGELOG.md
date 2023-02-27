@@ -11,3 +11,8 @@
     - `Spreadsheet.title()`
     - `Spreadsheet.tz()`
 - `Spreadsheet.pages()` and `Spreadsheet.page()` are now coroutine functions
+
+---
+
+## [0.1.0] - 2022-02-24
+Initial release

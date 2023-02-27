@@ -1,10 +1,8 @@
 from SlySheets import *
 
 async def test_readme():
-
-    app = OAuth2.app.from_json_file('test/app.json')
-    user = OAuth2.user.from_json_file('test/user.json')
-    auth = OAuth2(app, user)
+    
+    auth = OAuth2('test/app.json', 'test/user.json')
 
     spreadsheet = Spreadsheet(auth, '1arnulJxyi-I6LEeCPpEy6XE5V87UF54dUAo9F8fM5rw')
     page = await spreadsheet.page('Sheet 1')

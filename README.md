@@ -1,10 +1,12 @@
 # ![sly logo](https://raw.githubusercontent.com/dunkyl/SlyMeta/main/sly%20logo.svg) SlySheets for Python
 
+<!-- elevator begin -->
+
 > 🚧 **This library is an early work in progress! Breaking changes may be frequent.**
 
 > 🐍 For Python 3.10+
 
-## No-boilerplate, _async_ and _typed_ Google Sheets access. 😋
+No-boilerplate, *async* and *typed* Google Sheets access. 😋
 
 ```shell
 pip install slysheets
@@ -18,6 +20,8 @@ Currently, the following topics are supported:
 
 You can use [SlyAPI](https://github.com/dunkyl/SlyPyAPI) to directly grant user tokens using the command line, covering the whole OAuth 2 user grant process after getting client credentials from [Google](https://console.cloud.google.com/).
 
+<!-- elevator end -->
+
 ---
 
 Example usage:
@@ -28,7 +32,9 @@ from SlySheets import *
 
 async def main():
 
-    spreadsheet = await Spreadsheet('test/app.json', 'test/user.json', '1arnulJxyi-I6LEeCPpEy6XE5V87UF54dUAo9F8fM5rw')
+    auth = OAuth2('test/app.json', 'test/user.json')
+
+    spreadsheet = await Spreadsheet(auth, '1arnulJxyi-I6LEeCPpEy6XE5V87UF54dUAo9F8fM5rw')
     page = spreadsheet.page('Sheet 1')
 
     # A1 notation
