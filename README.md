@@ -32,10 +32,10 @@ from SlySheets import *
 
 async def main():
 
-    auth = OAuth2('test/app.json', 'test/user.json')
+     auth = OAuth2('test/app.json', 'test/user.json')
 
-    spreadsheet = await Spreadsheet(auth, '1arnulJxyi-I6LEeCPpEy6XE5V87UF54dUAo9F8fM5rw')
-    page = spreadsheet.page('Sheet 1')
+    spreadsheet = Spreadsheet(auth, '1arnulJxyi-I6LEeCPpEy6XE5V87UF54dUAo9F8fM5rw')
+    page = await spreadsheet.page('Sheet 1')
 
     print(page.link())
     # https://docs.google.com/spreadsheets/d/1arnulJxyi-I6LEeCPpEy6XE5V87UF54dUAo9F8fM5rw/edit#gid=0
@@ -46,6 +46,7 @@ async def main():
 
     # zero-indexed rows
     first_row = await page.row(0)
+    print(first_row)
     print(F" | {first_row[0]:6} | {first_row[1]:6} |") # | Foo     | Bar     |
 
     # header-indexed columns
@@ -61,11 +62,11 @@ async def main():
         print(F" | {row['Foo']:6} | {row['Bar']:6} |") # |      1 | a     | etc...
 
     # append and extend, of course
-    await page.append([0, 'u'])
-    await page.append_dict({'Foo': 1, 'Bar': 'v'})
+    await page.append([21, 'u'])
+    await page.append_dict({'Foo': 22, 'Bar': 'v'})
 
-    await page.extend([[3, 'w'], [4, 'x']])
-    await page.extend_dicts([{'Foo': 5, 'Bar': 'y'}, {'Foo': 6, 'Bar': 'z'}])
+    await page.extend([[23, 'w'], [24, 'x']])
+    await page.extend_dicts([{'Foo': 25, 'Bar': 'y'}, {'Foo': 26, 'Bar': 'z'}])
 
     # TODO: consider not using slices to simplify    
     # await sheet.delete(slice(-2, None))
@@ -77,11 +78,10 @@ async def main():
     # dates
     today = await page.date_at_cell('D5') # =TODAY()
     assert isinstance(today, datetime)
-    print(F"It is now {today.isoformat()} (timezone: {spreadsheet.tz})")
-
+    print(F"It is now {today.isoformat()} (timezone: {await spreadsheet.tz()})")
 
     # batch edits
-    async with sheet.batch() as batch:
+    async with page.batch() as batch:
         batch.set_range("C2:D3", [[0, 1], [2, 3]])
 
 asyncio.run(main())
