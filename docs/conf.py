@@ -75,6 +75,8 @@ html_theme_options = {
     "source_branch": "main",
     "source_directory": "docs/",
 }
+html_favicon = '_static/sly logo py.svg'
+html_logo = html_favicon
 
 ogp_social_cards = {
     "enable": False
