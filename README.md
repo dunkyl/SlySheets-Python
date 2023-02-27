@@ -1,4 +1,4 @@
-# ![sly logo](https://raw.githubusercontent.com/dunkyl/SlyMeta/main/sly%20logo.svg) SlySheets for Python
+# ![sly logo](https://raw.githubusercontent.com/dunkyl/SlyMeta/main/sly%20logo%20py.svg) SlySheets for Python
 
 <!-- elevator begin -->
 
