@@ -32,7 +32,7 @@ from SlySheets import *
 
 async def main():
 
-     auth = OAuth2('test/app.json', 'test/user.json')
+    auth = OAuth2('test/app.json', 'test/user.json')
 
     spreadsheet = Spreadsheet(auth, '1arnulJxyi-I6LEeCPpEy6XE5V87UF54dUAo9F8fM5rw')
     page = await spreadsheet.page('Sheet 1')
