@@ -1,8 +1,12 @@
+import os, pytest
 from SlySheets import *
 
+test_dir = os.path.dirname(__file__)
+
+@pytest.mark.skip("needs credentials")
 async def test_readme():
 
-    auth = OAuth2('test/app.json', 'test/user.json')
+    auth = OAuth2(F'{test_dir}/app.json', F'{test_dir}/user.json')
 
     spreadsheet = Spreadsheet(auth, '1arnulJxyi-I6LEeCPpEy6XE5V87UF54dUAo9F8fM5rw')
     page = await spreadsheet.page('Sheet 1')
