@@ -255,6 +255,10 @@ class Page:
 
     def batch(self):
         return BatchEdit(self)
+    
+    async def tz(self):
+        'Get the default timezone of the spreadsheet the page is in'
+        return await self._sheet.tz()
 
 @dataclass
 class BatchEditOp:
@@ -301,6 +305,8 @@ class BatchEdit:
                 'fields': field_mask,
                 'range': str(a1)
             }))
+        
+    
 
 class Spreadsheet(WebAPI):
     """
@@ -323,16 +329,16 @@ class Spreadsheet(WebAPI):
         '''Title of the spreadsheet'''
         return (await self._spreadsheets_get())['properties']['title']
     
-    # get last tz if already fetched
+    
     async def _timezone(self):
-        if self._tz is None:
-            return await self.tz()
-        return self._tz
+        tz_str = (await self._spreadsheets_get())['properties']['timeZone']
+        return pytz.timezone(tz_str)
 
     async def tz(self):
         '''Default timezone of the spreadsheet'''
-        tz_str = (await self._spreadsheets_get())['properties']['timeZone']
-        self._tz = pytz.timezone(tz_str)
+        # fetch if not cached
+        if self._tz is None:
+            self._tz = await self._timezone()
         return self._tz
     
     async def pages(self) -> list[Page]:

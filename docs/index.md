@@ -15,6 +15,9 @@ hide-toc: true
 :hidden:
 
 tutorial/getting_started.md
+tutorial/gsheet types.md
+tutorial/ranges.md
+tutorial/poll new rows.md
 ```
 
 ```{toctree}
