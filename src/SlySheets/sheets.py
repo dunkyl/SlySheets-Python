@@ -170,6 +170,7 @@ class Page:
     id: int
     title: str
     n_columns: int
+    _n_rows: int
 
     def __init__(self, page_meta: dict[str, Any], sheet: 'Spreadsheet'):
         page_props = page_meta['properties']
@@ -177,6 +178,11 @@ class Page:
         self.id = page_props['sheetId']
         self.title = page_props['title']
         self.n_columns = page_props['gridProperties']['columnCount']
+        self._n_rows = page_props['gridProperties']['rowCount'] 
+
+    async def grid_row_count(self):
+        '''Fetch the number of rows in the page grid. May include empty cells.'''
+        return (await self._sheet.page(self.title))._n_rows
 
     def link(self):
         return F'{self._sheet.link()}#gid={self.id}'
