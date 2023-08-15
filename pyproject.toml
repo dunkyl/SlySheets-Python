@@ -1,6 +1,6 @@
 [project]
 name = "SlySheets"
-version = "0.2.2"
+version = "0.2.3"
 description = "No-boilerplate, async and typed Google Sheets access."
 readme = "README.md"
 requires-python = ">=3.10"

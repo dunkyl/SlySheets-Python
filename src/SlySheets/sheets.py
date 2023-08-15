@@ -369,7 +369,7 @@ class Spreadsheet(WebAPI):
         if a1.page is None:
             raise ValueError(F"Page not specified: {a1}")
 
-        values = (await self._values_get(str(a1)))['values']
+        values = (await self._values_get(str(a1))).get('values', [])
 
         # fill in omitted cells on bottom and right with None
         shape_x, shape_y = a1.shape()
