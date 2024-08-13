@@ -6,7 +6,7 @@ from enum import Enum
 import re
 from datetime import datetime, timedelta, tzinfo, timezone
 from dataclasses import dataclass
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 import pytz
 
@@ -321,7 +321,7 @@ class Spreadsheet(WebAPI):
     base_url = "https://sheets.googleapis.com/v4/spreadsheets"
     id: str
 
-    _tz = None
+    _tz: tzinfo | None = None
 
     def __init__(self, auth: OAuth2, sheet_id: str):
         super().__init__(auth)
@@ -338,7 +338,7 @@ class Spreadsheet(WebAPI):
     
     async def _timezone(self):
         tz_str = (await self._spreadsheets_get())['properties']['timeZone']
-        return pytz.timezone(tz_str)
+        return cast(tzinfo, pytz.timezone(tz_str))
 
     async def tz(self):
         '''Default timezone of the spreadsheet'''
